@@ -2,6 +2,8 @@
 let messageHistory = [];
 // 打字机效果定时器
 let typingTimers = {};
+// 当前图表数据
+let currentChartOption = null;
 
 // 生成或获取会话 ID
 function getSessionId() {
@@ -50,7 +52,7 @@ async function sendMessage() {
     }
 }
 
-// 流式聊天
+// 流式聊天 - 支持新协议
 function streamChat(message, loadingId) {
     return new Promise((resolve, reject) => {
         // 创建 Bot 消息气泡
@@ -65,7 +67,7 @@ function streamChat(message, loadingId) {
             },
             body: JSON.stringify({ 
                 message: message,
-                sessionId: getSessionId() // 添加会话 ID
+                sessionId: getSessionId()
             })
         })
         .then(response => {
@@ -76,8 +78,8 @@ function streamChat(message, loadingId) {
             const reader = response.body.getReader();
             const decoder = new TextDecoder();
             let buffer = '';
-            let accumulatedResponse = '';
             let intentInfo = null;
+            let accumulatedText = '';
             
             function readStream() {
                 return reader.read().then(({ done, value }) => {
@@ -94,9 +96,10 @@ function streamChat(message, loadingId) {
                     buffer = lines.pop(); // 保留不完整的行
                     
                     // 处理每一行
+                    let eventName = null;
                     for (const line of lines) {
                         if (line.startsWith('event:')) {
-                            const eventName = line.slice(6).trim();
+                            eventName = line.slice(6).trim();
                             continue;
                         }
                         
@@ -105,27 +108,19 @@ function streamChat(message, loadingId) {
                             try {
                                 const data = JSON.parse(dataStr);
                                 
-                                if (data.type === 'meta') {
-                                    // 接收元信息
-                                    intentInfo = {
-                                        intent: data.intent,
-                                        intentDescription: data.intentDescription,
-                                        agentName: data.agentName
-                                    };
-                                } else if (data.type === 'chunk') {
-                                    // 接收流式内容（使用打字机效果）
-                                    const newContent = data.accumulated;
-                                    typeWriterEffect(botMessageId, newContent);
-                                    scrollToBottom();
-                                } else if (data.type === 'complete') {
-                                    // 完成 - 后端已清理 JSON
-                                    const finalContent = data.response;
-                                    // 确保最终内容完整显示
-                                    typeWriterEffect(botMessageId, finalContent, true);
-                                } else if (data.type === 'chart_event' || data.chartType) {
-                                    // 收到图表数据，触发弹窗
-                                    showChartModal(data);
+                                // 处理不同类型的事件
+                                if (eventName) {
+                                    handleSseEvent(eventName, data, botMessageId, (info) => {
+                                        intentInfo = info;
+                                    }, (text) => {
+                                        accumulatedText = text;
+                                        typeWriterEffect(botMessageId, text);
+                                        scrollToBottom();
+                                    });
                                 }
+                                
+                                // 重置 eventName
+                                eventName = null;
                             } catch (e) {
                                 console.error('Parse error:', e);
                             }
@@ -138,16 +133,193 @@ function streamChat(message, loadingId) {
             
             return readStream();
         })
-        .then(() => {
-            // 流式读取结束后，检查是否有图表事件（这里通过监听器处理更优雅，但为了简单我们在 fetch 后处理）
-            // 实际上 SSE 的 event 监听需要在 EventSource 中做，由于我们用的是 fetch + reader，
-            // 我们需要在上面的循环里直接触发弹窗。
-        })
         .catch(error => {
             removeTypingIndicator(loadingId);
             reject(error);
         });
     });
+}
+
+// 处理 SSE 事件
+function handleSseEvent(eventName, data, botMessageId, setIntentInfo, updateText) {
+    switch (eventName) {
+        case 'meta':
+            // 接收元信息
+            setIntentInfo({
+                intent: data.intent,
+                intentDescription: data.intentDescription,
+                agentName: data.agentName
+            });
+            break;
+            
+        case 'chunk':
+            // 接收流式文本片段
+            if (data.delta) {
+                const currentText = getCurrentText(botMessageId);
+                updateText(currentText + data.delta);
+            }
+            break;
+            
+        case 'chart':
+            // 收到图表数据，触发弹窗
+            console.log("收到图表数据:", data);
+            showChartModal(data);
+            break;
+            
+        case 'action':
+            // 收到前端指令
+            console.log("收到前端指令:", data);
+            executeAction(data);
+            break;
+            
+        case 'confirm':
+            // 需要用户确认
+            if (data.requiresConfirmation) {
+                const confirmed = confirm(data.message || '确定执行此操作吗？');
+                if (confirmed) {
+                    // TODO: 发送确认信号给后端
+                    showNotification('操作已确认', 'success');
+                } else {
+                    showNotification('操作已取消', 'info');
+                }
+            }
+            break;
+            
+        case 'complete':
+            // 完成信号
+            console.log("流式传输完成:", data);
+            break;
+            
+        default:
+            console.warn('未知事件类型:', eventName);
+    }
+}
+
+// 获取当前消息文本
+function getCurrentText(messageId) {
+    const messageWrapper = document.getElementById(messageId);
+    if (!messageWrapper) return '';
+    
+    const contentDiv = messageWrapper.querySelector('.message-content');
+    return contentDiv ? contentDiv.textContent : '';
+}
+
+// 执行前端指令
+function executeAction(actionResult) {
+    if (!actionResult || !actionResult.command) {
+        console.error('无效的指令数据');
+        return;
+    }
+    
+    const command = actionResult.command.toLowerCase();
+    const params = actionResult.params || {};
+    
+    switch (command) {
+        case 'navigate':
+            if (params.url) {
+                // 构建完整 URL（包含查询参数）
+                let url = params.url;
+                if (params.query) {
+                    const queryParams = new URLSearchParams(params.query).toString();
+                    url += '?' + queryParams;
+                }
+                window.location.href = url;
+            }
+            break;
+            
+        case 'openmodal':
+            if (params.modalId) {
+                // 根据 payload 打开不同的弹窗
+                openCustomModal(params);
+            }
+            break;
+            
+        case 'closemodal':
+            closeAllModals();
+            break;
+            
+        case 'refresh':
+            location.reload();
+            break;
+            
+        case 'custom':
+            // 自定义指令，根据 actionType 处理
+            handleCustomAction(params);
+            break;
+            
+        default:
+            console.warn('不支持的指令类型:', command);
+    }
+}
+
+// 打开自定义弹窗
+function openCustomModal(params) {
+    const modalId = params.modalId;
+    
+    // 如果是图表弹窗，使用现有逻辑
+    if (modalId === 'chart-modal' && params.payload) {
+        showChartModal(params.payload);
+    } else {
+        // 其他弹窗类型（可扩展）
+        showNotification(`打开弹窗: ${modalId}`, 'info');
+    }
+}
+
+// 关闭所有弹窗
+function closeAllModals() {
+    closeChartModal();
+    // 可以添加其他弹窗的关闭逻辑
+}
+
+// 处理自定义指令
+function handleCustomAction(params) {
+    const actionType = params.actionType;
+    
+    switch (actionType) {
+        case 'export_data':
+            // 导出数据
+            if (params.endpoint) {
+                exportData(params.endpoint, params.format, params.filters);
+            }
+            break;
+        default:
+            console.warn('未知的自定义指令类型:', actionType);
+    }
+}
+
+// 导出数据
+async function exportData(endpoint, format, filters) {
+    try {
+        showNotification('正在准备导出...', 'info');
+        
+        const response = await fetch(endpoint, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({ format, filters })
+        });
+        
+        if (response.ok) {
+            // 下载文件
+            const blob = await response.blob();
+            const url = window.URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `export_${Date.now()}.${format}`;
+            document.body.appendChild(a);
+            a.click();
+            window.URL.revokeObjectURL(url);
+            document.body.removeChild(a);
+            
+            showNotification('导出成功', 'success');
+        } else {
+            showNotification('导出失败', 'error');
+        }
+    } catch (error) {
+        console.error('导出错误:', error);
+        showNotification('导出失败: ' + error.message, 'error');
+    }
 }
 
 // 添加用户消息
@@ -198,15 +370,6 @@ function addBotMessage(messageId, text) {
     scrollToBottom();
 }
 
-// 更新 Bot 消息内容（直接更新，无动画）
-function updateBotMessage(messageId, text) {
-    const messageWrapper = document.getElementById(messageId);
-    if (messageWrapper) {
-        const contentDiv = messageWrapper.querySelector('.message-content');
-        contentDiv.innerHTML = escapeHtml(text);
-    }
-}
-
 // 打字机效果更新消息
 function typeWriterEffect(messageId, newText, immediate = false) {
     const messageWrapper = document.getElementById(messageId);
@@ -225,29 +388,8 @@ function typeWriterEffect(messageId, newText, immediate = false) {
         return;
     }
     
-    // 获取当前已显示的内容
-    const currentText = contentDiv.textContent || '';
-    
-    // 如果新文本比当前文本长，逐字显示新增部分
-    if (newText.length > currentText.length) {
-        const displayNextChar = () => {
-            const currentLength = contentDiv.textContent.length;
-            if (currentLength < newText.length) {
-                // 每次显示1-3个字符，让速度更快更自然
-                const charsToShow = Math.min(3, newText.length - currentLength);
-                const partialText = newText.substring(0, currentLength + charsToShow);
-                contentDiv.innerHTML = escapeHtml(partialText);
-                
-                // 随机延迟，模拟真实打字速度
-                const delay = Math.random() * 20 + 10; // 10-30ms
-                typingTimers[messageId] = setTimeout(displayNextChar, delay);
-            }
-        };
-        
-        displayNextChar();
-    } else {
-        contentDiv.innerHTML = escapeHtml(newText);
-    }
+    // 直接更新内容（流式已经逐字发送）
+    contentDiv.innerHTML = escapeHtml(newText);
 }
 
 // 更新消息信息
@@ -331,6 +473,7 @@ function getIntentIcon(intent) {
         'MATH': '🔢',
         'KNOWLEDGE': '📚',
         'CODE': '💻',
+        'BI_ANALYSIS': '📊',
         'GENERAL': '💬'
     };
     return icons[intent] || '❓';
@@ -365,6 +508,7 @@ function adjustTextareaHeight() {
 
 // 显示通知
 function showNotification(message, type = 'info') {
+    // 可以使用更优雅的通知组件
     alert(message);
 }
 
