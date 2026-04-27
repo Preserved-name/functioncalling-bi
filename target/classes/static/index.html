@@ -1,0 +1,115 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>多 Agent 智能对话系统</title>
+    <link rel="stylesheet" href="/css/style.css">
+    <!-- 引入 ECharts -->
+    <script src="https://cdn.jsdelivr.net/npm/echarts@5.4.3/dist/echarts.min.js"></script>
+</head>
+<body>
+    <div class="app-container">
+        <!-- 侧边栏 -->
+        <aside class="sidebar">
+            <div class="sidebar-header">
+                <h2>🤖 AI Agent</h2>
+                <p>智能分发系统</p>
+            </div>
+            
+            <div class="examples-section">
+                <h3>💡 示例问题</h3>
+                <div class="example-list">
+                    <div class="example-item" onclick="useExample('今天北京天气怎么样？')">
+                        <span class="example-icon">🌤️</span>
+                        <span>天气查询</span>
+                    </div>
+                    <div class="example-item" onclick="useExample('计算 123 * 456 等于多少？')">
+                        <span class="example-icon">🔢</span>
+                        <span>数学计算</span>
+                    </div>
+                    <div class="example-item" onclick="useExample('什么是人工智能？')">
+                        <span class="example-icon">📚</span>
+                        <span>知识问答</span>
+                    </div>
+                    <div class="example-item" onclick="useExample('如何用 Java 实现快速排序？')">
+                        <span class="example-icon">💻</span>
+                        <span>代码助手</span>
+                    </div>
+                    <div class="example-item" onclick="useExample('你好，很高兴认识你')">
+                        <span class="example-icon">👋</span>
+                        <span>通用对话</span>
+                    </div>
+                    <div class="example-item" onclick="useExample('数据库中有哪些表？')">
+                        <span class="example-icon">📊</span>
+                        <span>数据分析</span>
+                    </div>
+                </div>
+            </div>
+
+            <div class="sidebar-footer">
+                <p>Powered by LangChain4j</p>
+                <button class="clear-memory-btn" onclick="clearMemory()" title="清除记忆">
+                    🗑️ 清除记忆
+                </button>
+            </div>
+        </aside>
+
+        <!-- 主聊天区域 -->
+        <main class="chat-main">
+            <header class="chat-header">
+                <h1>多 Agent 智能对话</h1>
+                <div class="agent-status" id="agentStatus">
+                    <span class="status-dot"></span>
+                    <span class="status-text">在线</span>
+                </div>
+            </header>
+
+            <!-- 消息列表 -->
+            <div class="messages-container" id="messagesContainer">
+                <div class="welcome-message">
+                    <div class="avatar bot-avatar">🤖</div>
+                    <div class="message-bubble bot-message">
+                        <p>你好！我是多 Agent 智能助手。我可以帮你：</p>
+                        <ul>
+                            <li>🌤️ 查询天气信息</li>
+                            <li>🔢 进行数学计算</li>
+                            <li>📚 回答知识问题</li>
+                            <li>💻 提供编程帮助</li>
+                        </ul>
+                        <p>请问有什么可以帮你的吗？</p>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 输入区域 -->
+            <div class="input-area">
+                <div class="input-wrapper">
+                    <textarea 
+                        id="messageInput" 
+                        placeholder="输入消息... (Shift+Enter 换行)"
+                        rows="1"
+                    ></textarea>
+                    <button id="sendBtn" onclick="sendMessage()">
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <line x1="22" y1="2" x2="11" y2="13"></line>
+                            <polygon points="22 2 15 22 11 13 2 9 22 2"></polygon>
+                        </svg>
+                    </button>
+                </div>
+            </div>
+        </main>
+    </div>
+
+    <!-- 图表弹窗 -->
+    <div id="chartModal" class="modal" style="display: none;">
+        <div class="modal-content">
+            <span class="close-btn" onclick="closeChartModal()">&times;</span>
+            <h3 id="chartTitle">数据可视化</h3>
+            <div id="chartContainer" style="width: 100%; height: 400px;"></div>
+        </div>
+    </div>
+
+    <script src="/js/app.js"></script>
+</body>
+</html>
