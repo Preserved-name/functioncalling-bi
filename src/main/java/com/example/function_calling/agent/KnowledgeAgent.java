@@ -1,16 +1,21 @@
 package com.example.function_calling.agent;
 
 import com.example.function_calling.model.Intent;
+import com.example.function_calling.service.ConversationService;
+import dev.langchain4j.memory.chat.MessageWindowChatMemory;
 import dev.langchain4j.model.chat.ChatLanguageModel;
+import dev.langchain4j.service.AiServices;
 import org.springframework.stereotype.Component;
 
 @Component
 public class KnowledgeAgent implements Agent {
 
     private final ChatLanguageModel chatModel;
+    private final ConversationService conversationService;
 
-    public KnowledgeAgent(ChatLanguageModel chatModel) {
+    public KnowledgeAgent(ChatLanguageModel chatModel, ConversationService conversationService) {
         this.chatModel = chatModel;
+        this.conversationService = conversationService;
     }
 
     @Override
@@ -20,18 +25,33 @@ public class KnowledgeAgent implements Agent {
 
     @Override
     public String handle(String userMessage) {
-        String prompt = String.format(
-                "你是一个知识渊博的问答助手。请准确、详细地回答以下问题：\n\n" +
-                "用户问题：%s\n\n" +
-                "请提供清晰、准确的回答，必要时可以补充相关背景知识。",
-                userMessage
-        );
+        return handleWithSession("default-session", userMessage);
+    }
+    
+    /**
+     * 带会话 ID 的处理方法
+     */
+    public String handleWithSession(String sessionId, String userMessage) {
+        // 使用统一的 ConversationService 获取记忆
+        MessageWindowChatMemory memory = conversationService.getOrCreateMemory(sessionId);
         
-        return chatModel.generate(prompt);
+        KnowledgeAssistant assistant = AiServices.builder(KnowledgeAssistant.class)
+                .chatLanguageModel(chatModel)
+                .chatMemory(memory)
+                .build();
+        
+        return assistant.chat(userMessage);
     }
 
     @Override
     public String getName() {
         return "知识助手";
+    }
+
+    /**
+     * 知识助手接口 - 用于 Function Calling
+     */
+    interface KnowledgeAssistant {
+        String chat(String userMessage);
     }
 }
