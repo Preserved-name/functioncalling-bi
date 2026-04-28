@@ -70,21 +70,16 @@ public class BiTools {
             if (!trimmedSql.contains("limit")) {
                 sql = sql + " LIMIT 100";
             }
-            
+
+            log.info("执行 SQL 查询：{}", sql);
+
             List<Map<String, Object>> results = jdbcTemplate.queryForList(sql);
             
             if (results.isEmpty()) {
                 return "查询成功，但未返回任何数据。";
             }
-            
-            // 格式化结果为字符串，并强制提醒 AI 调用图表工具
-            StringBuilder resultText = new StringBuilder();
-            resultText.append("查询成功，返回 ").append(results.size()).append(" 条记录。\n");
-            resultText.append("原始数据: ").append(results.toString()).append("\n");
-            resultText.append("【重要提示】：如果用户需要可视化图表，请在你的回复最后一行输出一个 JSON，格式为：{\"type\": \"chart_event\", \"chartType\": \"line/bar/pie\", \"title\": \"标题\", \"rawData\": ");
-            resultText.append(results.toString());
-            resultText.append("}");
-            return resultText.toString();
+
+            return "查询成功，返回 " + results.size() + " 条记录。\n";
         } catch (Exception e) {
             return "查询执行失败: " + e.getMessage();
         }
@@ -94,7 +89,9 @@ public class BiTools {
      * 渲染图表 - Function Calling 工具
      * 当需要展示图表时调用此工具，系统会自动将图表数据通过 SSE 发送给前端
      */
-    @Tool("当用户需要可视化图表时必须调用此工具。参数：chartType(折线图line/柱状图bar/饼图pie), title(图表标题), xAxis(X轴配置，包含label和data数组), yAxis(Y轴配置，包含label和data数组), series(数据系列数组，每个元素包含name和data), rawData(原始查询结果)")
+    @Tool("当用户需要可视化图表时必须调用此工具。参数：chartType(折线图line/柱状图bar/饼图pie)," +
+            " title(图表标题), xAxis(X轴配置，包含label和data数组), yAxis(Y轴配置，包含label和data数组), " +
+            "series(数据系列数组，每个元素包含name和data), rawData(原始查询结果)")
     public String renderChart(String chartType, String title, 
                              ChartRequest.AxisConfig xAxis, 
                              ChartRequest.AxisConfig yAxis,

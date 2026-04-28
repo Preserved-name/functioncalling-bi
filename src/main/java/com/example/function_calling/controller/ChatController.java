@@ -1,6 +1,8 @@
 package com.example.function_calling.controller;
 
+import com.example.function_calling.agent.*;
 import com.example.function_calling.model.AiResponse;
+import com.example.function_calling.model.Intent;
 import com.example.function_calling.service.ActionExecutor;
 import com.example.function_calling.service.AgentDispatcher;
 import com.fasterxml.jackson.databind.JsonNode;
@@ -17,6 +19,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.CountDownLatch;
 
 @RestController
 @RequestMapping("/api")
@@ -25,11 +28,11 @@ public class ChatController {
     private static final Logger log = LoggerFactory.getLogger(ChatController.class);
     private final AgentDispatcher agentDispatcher;
     private final ActionExecutor actionExecutor;
-    private final com.example.function_calling.agent.StreamingBiAgent streamingBiAgent;
+    private final StreamingBiAgent streamingBiAgent;
     private final ObjectMapper objectMapper = new ObjectMapper();
 
     public ChatController(AgentDispatcher agentDispatcher, ActionExecutor actionExecutor, 
-                         com.example.function_calling.agent.StreamingBiAgent streamingBiAgent) {
+                         StreamingBiAgent streamingBiAgent) {
         this.agentDispatcher = agentDispatcher;
         this.actionExecutor = actionExecutor;
         this.streamingBiAgent = streamingBiAgent;
@@ -77,22 +80,22 @@ public class ChatController {
                 sendSseEvent(emitter, "meta", metaInfo);
                 
                 // 2. 根据 Agent 类型选择流式策略
-                if (intent == com.example.function_calling.model.Intent.BI_ANALYSIS) {
+                if (intent == Intent.BI_ANALYSIS) {
                     // BI Agent：使用真正的流式输出（传递 sessionId）
                     handleStreamingBiAgent(emitter, request.getMessage(), requestId, sessionId, intent, agent.getName());
                 } else {
                     // 其他 Agent：使用原有方式（等待完整响应后流式发送，传递 sessionId）
                     String responseText;
-                    if (agent instanceof com.example.function_calling.agent.WeatherAgent) {
-                        responseText = ((com.example.function_calling.agent.WeatherAgent) agent).handleWithSession(sessionId, request.getMessage());
-                    } else if (agent instanceof com.example.function_calling.agent.MathAgent) {
-                        responseText = ((com.example.function_calling.agent.MathAgent) agent).handleWithSession(sessionId, request.getMessage());
-                    } else if (agent instanceof com.example.function_calling.agent.KnowledgeAgent) {
-                        responseText = ((com.example.function_calling.agent.KnowledgeAgent) agent).handleWithSession(sessionId, request.getMessage());
-                    } else if (agent instanceof com.example.function_calling.agent.CodeAgent) {
-                        responseText = ((com.example.function_calling.agent.CodeAgent) agent).handleWithSession(sessionId, request.getMessage());
-                    } else if (agent instanceof com.example.function_calling.agent.GeneralAgent) {
-                        responseText = ((com.example.function_calling.agent.GeneralAgent) agent).handleWithSession(sessionId, request.getMessage());
+                    if (agent instanceof WeatherAgent) {
+                        responseText = ((WeatherAgent) agent).handleWithSession(sessionId, request.getMessage());
+                    } else if (agent instanceof MathAgent) {
+                        responseText = ((MathAgent) agent).handleWithSession(sessionId, request.getMessage());
+                    } else if (agent instanceof KnowledgeAgent) {
+                        responseText = ((KnowledgeAgent) agent).handleWithSession(sessionId, request.getMessage());
+                    } else if (agent instanceof CodeAgent) {
+                        responseText = ((CodeAgent) agent).handleWithSession(sessionId, request.getMessage());
+                    } else if (agent instanceof GeneralAgent) {
+                        responseText = ((GeneralAgent) agent).handleWithSession(sessionId, request.getMessage());
                     } else {
                         responseText = agent.handle(request.getMessage());
                     }
@@ -120,9 +123,9 @@ public class ChatController {
      */
     private void handleStreamingBiAgent(SseEmitter emitter, String userMessage, 
                                         String requestId, String sessionId, 
-                                        com.example.function_calling.model.Intent intent, String agentName) throws IOException {
+                                        Intent intent, String agentName) throws IOException {
         StringBuilder fullResponse = new StringBuilder();
-        java.util.concurrent.CountDownLatch latch = new java.util.concurrent.CountDownLatch(1);
+        CountDownLatch latch = new CountDownLatch(1);
         
         streamingBiAgent.handleStreamingWithSession(sessionId, userMessage,
             // onToken: 实时推送每个 token（只发送文本）

@@ -1,5 +1,8 @@
 package com.example.function_calling.service;
 
+import jakarta.annotation.PostConstruct;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
@@ -9,6 +12,7 @@ import java.sql.DatabaseMetaData;
 import java.sql.ResultSet;
 import java.util.HashMap;
 import java.util.Map;
+import java.util.concurrent.atomic.AtomicReference;
 
 /**
  * Schema 提取器 - 从 MySQL 自动获取数据库元数据
@@ -16,13 +20,46 @@ import java.util.Map;
 @Service
 public class SchemaExtractor {
 
+    private static final Logger log = LoggerFactory.getLogger(SchemaExtractor.class);
+
     @Autowired
     private DataSource dataSource;
 
+    // 优化 3：Schema 缓存机制
+    private final AtomicReference<String> schemaCache = new AtomicReference<>();
+
     /**
-     * 获取所有表的 Schema 信息
+     * 应用启动时加载并缓存 Schema
+     */
+    @PostConstruct
+    public void init() {
+        try {
+            String schema = extractAllSchemasFromDB();
+            schemaCache.set(schema);
+            log.info("数据库 Schema 已预加载并缓存，长度: {}", schema.length());
+        } catch (Exception e) {
+            log.error("初始化 Schema 缓存失败", e);
+        }
+    }
+
+    /**
+     * 获取所有表的 Schema 信息（带缓存）
      */
     public String extractAllSchemas() {
+        String cached = schemaCache.get();
+        if (cached != null) {
+            return cached;
+        }
+        // 如果缓存为空，重新加载
+        String schema = extractAllSchemasFromDB();
+        schemaCache.set(schema);
+        return schema;
+    }
+
+    /**
+     * 从数据库实际提取 Schema 的逻辑
+     */
+    private String extractAllSchemasFromDB() {
         StringBuilder schemaText = new StringBuilder();
         
         try (Connection connection = dataSource.getConnection()) {
