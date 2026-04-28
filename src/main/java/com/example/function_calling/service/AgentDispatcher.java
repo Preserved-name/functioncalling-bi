@@ -25,6 +25,13 @@ public class AgentDispatcher {
      * 根据用户问题分发到对应的 Agent
      */
     public AgentResponse dispatch(String userMessage) {
+        return dispatch(userMessage, "default-session");
+    }
+    
+    /**
+     * 根据用户问题分发到对应的 Agent（带会话 ID）
+     */
+    public AgentResponse dispatch(String userMessage, String sessionId) {
         // 1. 识别意图
         Intent intent = intentRecognizer.recognize(userMessage);
         
@@ -34,8 +41,23 @@ public class AgentDispatcher {
             agent = agentMap.get(Intent.GENERAL);
         }
         
-        // 3. 处理问题
-        String response = agent.handle(userMessage);
+        // 3. 处理问题（传递 sessionId）
+        String response;
+        if (agent instanceof com.example.function_calling.agent.WeatherAgent) {
+            response = ((com.example.function_calling.agent.WeatherAgent) agent).handleWithSession(sessionId, userMessage);
+        } else if (agent instanceof com.example.function_calling.agent.MathAgent) {
+            response = ((com.example.function_calling.agent.MathAgent) agent).handleWithSession(sessionId, userMessage);
+        } else if (agent instanceof com.example.function_calling.agent.KnowledgeAgent) {
+            response = ((com.example.function_calling.agent.KnowledgeAgent) agent).handleWithSession(sessionId, userMessage);
+        } else if (agent instanceof com.example.function_calling.agent.CodeAgent) {
+            response = ((com.example.function_calling.agent.CodeAgent) agent).handleWithSession(sessionId, userMessage);
+        } else if (agent instanceof com.example.function_calling.agent.StreamingBiAgent) {
+            response = ((com.example.function_calling.agent.StreamingBiAgent) agent).handleWithSession(sessionId, userMessage);
+        } else if (agent instanceof com.example.function_calling.agent.GeneralAgent) {
+            response = ((com.example.function_calling.agent.GeneralAgent) agent).handleWithSession(sessionId, userMessage);
+        } else {
+            response = agent.handle(userMessage);
+        }
         
         return new AgentResponse(intent, agent.getName(), response);
     }

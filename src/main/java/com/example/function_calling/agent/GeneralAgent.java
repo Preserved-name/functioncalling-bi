@@ -37,6 +37,13 @@ public class GeneralAgent implements Agent {
      * 带会话 ID 的处理方法
      */
     public String handleWithMemory(String sessionId, String userMessage) {
+        return handleWithSession(sessionId, userMessage);
+    }
+    
+    /**
+     * 带会话 ID 的处理方法（别名）
+     */
+    public String handleWithSession(String sessionId, String userMessage) {
         // 创建带记忆的助手
         ChatAssistant assistant = AiServices.builder(ChatAssistant.class)
                 .chatLanguageModel(chatModel)

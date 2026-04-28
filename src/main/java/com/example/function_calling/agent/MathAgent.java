@@ -1,16 +1,21 @@
 package com.example.function_calling.agent;
 
 import com.example.function_calling.model.Intent;
+import com.example.function_calling.service.ConversationService;
+import dev.langchain4j.memory.chat.MessageWindowChatMemory;
 import dev.langchain4j.model.chat.ChatLanguageModel;
+import dev.langchain4j.service.AiServices;
 import org.springframework.stereotype.Component;
 
 @Component
 public class MathAgent implements Agent {
 
     private final ChatLanguageModel chatModel;
+    private final ConversationService conversationService;
 
-    public MathAgent(ChatLanguageModel chatModel) {
+    public MathAgent(ChatLanguageModel chatModel, ConversationService conversationService) {
         this.chatModel = chatModel;
+        this.conversationService = conversationService;
     }
 
     @Override
@@ -20,18 +25,33 @@ public class MathAgent implements Agent {
 
     @Override
     public String handle(String userMessage) {
-        String prompt = String.format(
-                "你是一个专业的数学计算助手。请仔细解答以下数学问题，展示计算过程：\n\n" +
-                "用户问题：%s\n\n" +
-                "请给出详细的解题步骤和最终答案。",
-                userMessage
-        );
+        return handleWithSession("default-session", userMessage);
+    }
+    
+    /**
+     * 带会话 ID 的处理方法
+     */
+    public String handleWithSession(String sessionId, String userMessage) {
+        // 使用统一的 ConversationService 获取记忆
+        MessageWindowChatMemory memory = conversationService.getOrCreateMemory(sessionId);
         
-        return chatModel.generate(prompt);
+        MathAssistant assistant = AiServices.builder(MathAssistant.class)
+                .chatLanguageModel(chatModel)
+                .chatMemory(memory)
+                .build();
+        
+        return assistant.chat(userMessage);
     }
 
     @Override
     public String getName() {
         return "数学助手";
+    }
+
+    /**
+     * 数学助手接口 - 用于 Function Calling
+     */
+    interface MathAssistant {
+        String chat(String userMessage);
     }
 }
