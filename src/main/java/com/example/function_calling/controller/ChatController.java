@@ -116,7 +116,7 @@ public class ChatController {
     }
 
     /**
-     * 处理 BI Agent 的真正流式输出
+     * 处理 BI Agent 的真正流式输出（使用 Function Calling）
      */
     private void handleStreamingBiAgent(SseEmitter emitter, String userMessage, 
                                         String requestId, String sessionId, 
@@ -125,7 +125,7 @@ public class ChatController {
         java.util.concurrent.CountDownLatch latch = new java.util.concurrent.CountDownLatch(1);
         
         streamingBiAgent.handleStreamingWithSession(sessionId, userMessage,
-            // onToken: 实时推送每个 token
+            // onToken: 实时推送每个 token（只发送文本）
             token -> {
                 try {
                     Map<String, Object> chunkData = new HashMap<>();
@@ -136,32 +136,28 @@ public class ChatController {
                     log.error("发送 token 失败", e);
                 }
             },
-            // onComplete: 解析结构化数据
+            // onChart: 收到图表数据时触发
+            chartRequest -> {
+                try {
+                    log.info("========== 收到图表数据 ==========");
+                    log.info("图表类型: {}", chartRequest.getChartType());
+                    log.info("图表标题: {}", chartRequest.getTitle());
+                    log.info("X轴标签: {}", chartRequest.getXAxis() != null ? chartRequest.getXAxis().getLabel() : "null");
+                    log.info("Y轴标签: {}", chartRequest.getYAxis() != null ? chartRequest.getYAxis().getLabel() : "null");
+                    log.info("Series数量: {}", chartRequest.getSeries() != null ? chartRequest.getSeries().size() : 0);
+                    log.info("正在发送 event:chart...");
+                    // 直接发送完整的图表数据
+                    sendSseEvent(emitter, "chart", chartRequest);
+                    log.info("event:chart 已发送");
+                } catch (IOException e) {
+                    log.error("发送图表数据失败", e);
+                }
+            },
+            // onComplete: 完成回调
             completeText -> {
                 try {
-                    // 尝试解析为结构化响应
-                    AiResponse structuredResponse = tryParseStructuredResponse(
-                        completeText, requestId, sessionId, intent, agentName);
-                    
-                    if (structuredResponse != null) {
-                        // 发送结构化数据（chart 或 action）
-                        if (structuredResponse.getType() == AiResponse.ResponseType.CHART 
-                            && structuredResponse.getContent().getData() != null) {
-                            sendSseEvent(emitter, "chart", structuredResponse.getContent().getData());
-                        } else if (structuredResponse.getType() == AiResponse.ResponseType.ACTION 
-                            && structuredResponse.getContent().getAction() != null) {
-                            ActionExecutor.ActionResult result = actionExecutor.execute(
-                                structuredResponse.getContent().getAction());
-                            if (result.isSuccess()) {
-                                sendSseEvent(emitter, "action", result);
-                            } else if (result.isRequiresConfirmation()) {
-                                Map<String, Object> confirmData = new HashMap<>();
-                                confirmData.put("requiresConfirmation", true);
-                                confirmData.put("message", result.getConfirmationMessage());
-                                sendSseEvent(emitter, "confirm", confirmData);
-                            }
-                        }
-                    }
+                    // 不再需要解析 JSON，因为图表已经通过 Function Calling 分离
+                    log.debug("流式输出完成，总长度: {}", completeText.length());
                 } catch (Exception e) {
                     log.error("处理完整响应失败", e);
                 } finally {

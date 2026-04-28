@@ -547,42 +547,120 @@ function showChartModal(chartData) {
     const myChart = container._echarts;
     
     let option = {};
-    let rawData = chartData.rawData;
     
-    // 尝试解析 rawData (它可能是一个字符串，也可能已经是对象)
-    if (typeof rawData === 'string') {
-        try {
-            // 如果字符串里包含 "查询成功..." 这样的前缀，尝试提取 JSON 数组部分
-            const jsonMatch = rawData.match(/\[.*\]/s);
-            if (jsonMatch) {
-                rawData = JSON.parse(jsonMatch[0]);
-            } else {
-                rawData = JSON.parse(rawData);
-            }
-        } catch (e) {
-            console.error("解析 rawData 失败", e);
-            return;
-        }
-    }
-    
-    if (Array.isArray(rawData) && rawData.length > 0) {
-        const keys = Object.keys(rawData[0]);
-        if (keys.length >= 2) {
-            const xAxisData = rawData.map(item => String(item[keys[0]]));
-            const seriesData = rawData.map(item => Number(item[keys[1]]));
+    // 新格式：直接使用 xAxis, yAxis, series
+    if (chartData.xAxis && chartData.yAxis && chartData.series) {
+        const isPie = chartData.chartType === 'pie';
+        
+        if (isPie) {
+            // 饼图特殊处理
+            const pieData = chartData.series[0].data.map((value, index) => ({
+                name: chartData.xAxis.data[index] || `类别${index + 1}`,
+                value: value
+            }));
             
             option = {
-                tooltip: { trigger: 'axis' },
-                xAxis: { type: 'category', data: xAxisData, axisLabel: { rotate: 30 } },
-                yAxis: { type: 'value' },
+                tooltip: { trigger: 'item' },
+                legend: { top: '5%', left: 'center' },
                 series: [{
-                    name: keys[1],
-                    data: seriesData,
-                    type: chartData.chartType === 'line' ? 'line' : (chartData.chartType === 'pie' ? 'pie' : 'bar'),
-                    smooth: true
+                    name: chartData.title || '数据',
+                    type: 'pie',
+                    radius: ['40%', '70%'],
+                    avoidLabelOverlap: false,
+                    itemStyle: {
+                        borderRadius: 10,
+                        borderColor: '#fff',
+                        borderWidth: 2
+                    },
+                    label: {
+                        show: true,
+                        formatter: '{b}: {c} ({d}%)'
+                    },
+                    data: pieData
                 }]
             };
-            myChart.setOption(option, true);
+        } else {
+            // 柱状图或折线图
+            option = {
+                tooltip: { 
+                    trigger: 'axis',
+                    axisPointer: { type: 'shadow' }
+                },
+                legend: {
+                    data: chartData.series.map(s => s.name)
+                },
+                grid: {
+                    left: '3%',
+                    right: '4%',
+                    bottom: '3%',
+                    containLabel: true
+                },
+                xAxis: {
+                    type: 'category',
+                    name: chartData.xAxis.label || '',
+                    data: chartData.xAxis.data || [],
+                    axisLabel: { 
+                        rotate: 30,
+                        interval: 0
+                    }
+                },
+                yAxis: {
+                    type: 'value',
+                    name: chartData.yAxis.label || ''
+                },
+                series: chartData.series.map(s => ({
+                    name: s.name,
+                    type: chartData.chartType === 'line' ? 'line' : 'bar',
+                    data: s.data,
+                    smooth: s.smooth !== false,
+                    itemStyle: {
+                        color: s.color
+                    }
+                }))
+            };
+        }
+        
+        myChart.setOption(option, true);
+    } 
+    // 旧格式兼容：使用 rawData 自动解析
+    else if (chartData.rawData) {
+        let rawData = chartData.rawData;
+        
+        // 尝试解析 rawData (它可能是一个字符串，也可能已经是对象)
+        if (typeof rawData === 'string') {
+            try {
+                // 如果字符串里包含 "查询成功..." 这样的前缀，尝试提取 JSON 数组部分
+                const jsonMatch = rawData.match(/\[.*\]/s);
+                if (jsonMatch) {
+                    rawData = JSON.parse(jsonMatch[0]);
+                } else {
+                    rawData = JSON.parse(rawData);
+                }
+            } catch (e) {
+                console.error("解析 rawData 失败", e);
+                return;
+            }
+        }
+        
+        if (Array.isArray(rawData) && rawData.length > 0) {
+            const keys = Object.keys(rawData[0]);
+            if (keys.length >= 2) {
+                const xAxisData = rawData.map(item => String(item[keys[0]]));
+                const seriesData = rawData.map(item => Number(item[keys[1]]));
+                
+                option = {
+                    tooltip: { trigger: 'axis' },
+                    xAxis: { type: 'category', data: xAxisData, axisLabel: { rotate: 30 } },
+                    yAxis: { type: 'value' },
+                    series: [{
+                        name: keys[1],
+                        data: seriesData,
+                        type: chartData.chartType === 'line' ? 'line' : (chartData.chartType === 'pie' ? 'pie' : 'bar'),
+                        smooth: true
+                    }]
+                };
+                myChart.setOption(option, true);
+            }
         }
     }
 }
