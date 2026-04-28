@@ -1,9 +1,9 @@
 D:\dev\function_calling\src\main\java\com\example\function_calling\agent\Agent.java
-D:\dev\function_calling\src\main\java\com\example\function_calling\agent\BiAgent.java
 D:\dev\function_calling\src\main\java\com\example\function_calling\agent\CodeAgent.java
 D:\dev\function_calling\src\main\java\com\example\function_calling\agent\GeneralAgent.java
 D:\dev\function_calling\src\main\java\com\example\function_calling\agent\KnowledgeAgent.java
 D:\dev\function_calling\src\main\java\com\example\function_calling\agent\MathAgent.java
+D:\dev\function_calling\src\main\java\com\example\function_calling\agent\StreamingBiAgent.java
 D:\dev\function_calling\src\main\java\com\example\function_calling\agent\WeatherAgent.java
 D:\dev\function_calling\src\main\java\com\example\function_calling\config\AiConfig.java
 D:\dev\function_calling\src\main\java\com\example\function_calling\config\SecurityConfig.java

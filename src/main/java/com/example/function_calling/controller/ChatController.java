@@ -13,6 +13,7 @@ import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 
 import java.io.IOException;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
@@ -24,11 +25,14 @@ public class ChatController {
     private static final Logger log = LoggerFactory.getLogger(ChatController.class);
     private final AgentDispatcher agentDispatcher;
     private final ActionExecutor actionExecutor;
+    private final com.example.function_calling.agent.StreamingBiAgent streamingBiAgent;
     private final ObjectMapper objectMapper = new ObjectMapper();
 
-    public ChatController(AgentDispatcher agentDispatcher, ActionExecutor actionExecutor) {
+    public ChatController(AgentDispatcher agentDispatcher, ActionExecutor actionExecutor, 
+                         com.example.function_calling.agent.StreamingBiAgent streamingBiAgent) {
         this.agentDispatcher = agentDispatcher;
         this.actionExecutor = actionExecutor;
+        this.streamingBiAgent = streamingBiAgent;
     }
 
     /**
@@ -49,7 +53,7 @@ public class ChatController {
     }
 
     /**
-     * 流式聊天接口 - 支持多类型响应
+     * 流式聊天接口 - 支持多类型响应（真正流式）
      */
     @PostMapping(value = "/chat/stream", produces = MediaType.TEXT_EVENT_STREAM_VALUE)
     public SseEmitter chatStream(@RequestBody ChatRequest request) {
@@ -72,21 +76,17 @@ public class ChatController {
                 
                 sendSseEvent(emitter, "meta", metaInfo);
                 
-                // 2. 获取 Agent 响应
-                String responseText = agent.handle(request.getMessage());
-                
-                // 3. 尝试解析为结构化响应
-                AiResponse structuredResponse = tryParseStructuredResponse(responseText, requestId, sessionId, intent, agent.getName());
-                
-                if (structuredResponse != null) {
-                    // 结构化响应：直接发送完整对象
-                    handleStructuredResponse(emitter, structuredResponse);
+                // 2. 根据 Agent 类型选择流式策略
+                if (intent == com.example.function_calling.model.Intent.BI_ANALYSIS) {
+                    // BI Agent：使用真正的流式输出
+                    handleStreamingBiAgent(emitter, request.getMessage(), requestId, sessionId, intent, agent.getName());
                 } else {
-                    // 非结构化响应：流式逐字发送
+                    // 其他 Agent：使用原有方式（等待完整响应后流式发送）
+                    String responseText = agent.handle(request.getMessage());
                     handleStreamingText(emitter, responseText);
                 }
                 
-                // 4. 发送完成信号
+                // 3. 发送完成信号
                 Map<String, Object> completeData = new HashMap<>();
                 completeData.put("status", "success");
                 completeData.put("requestId", requestId);
@@ -103,6 +103,69 @@ public class ChatController {
     }
 
     /**
+     * 处理 BI Agent 的真正流式输出
+     */
+    private void handleStreamingBiAgent(SseEmitter emitter, String userMessage, 
+                                        String requestId, String sessionId, 
+                                        com.example.function_calling.model.Intent intent, String agentName) throws IOException {
+        StringBuilder fullResponse = new StringBuilder();
+        java.util.concurrent.CountDownLatch latch = new java.util.concurrent.CountDownLatch(1);
+        
+        streamingBiAgent.handleStreaming(userMessage,
+            // onToken: 实时推送每个 token
+            token -> {
+                try {
+                    Map<String, Object> chunkData = new HashMap<>();
+                    chunkData.put("delta", token);
+                    sendSseEvent(emitter, "chunk", chunkData);
+                    fullResponse.append(token);
+                } catch (IOException e) {
+                    log.error("发送 token 失败", e);
+                }
+            },
+            // onComplete: 解析结构化数据
+            completeText -> {
+                try {
+                    // 尝试解析为结构化响应
+                    AiResponse structuredResponse = tryParseStructuredResponse(
+                        completeText, requestId, sessionId, intent, agentName);
+                    
+                    if (structuredResponse != null) {
+                        // 发送结构化数据（chart 或 action）
+                        if (structuredResponse.getType() == AiResponse.ResponseType.CHART 
+                            && structuredResponse.getContent().getData() != null) {
+                            sendSseEvent(emitter, "chart", structuredResponse.getContent().getData());
+                        } else if (structuredResponse.getType() == AiResponse.ResponseType.ACTION 
+                            && structuredResponse.getContent().getAction() != null) {
+                            ActionExecutor.ActionResult result = actionExecutor.execute(
+                                structuredResponse.getContent().getAction());
+                            if (result.isSuccess()) {
+                                sendSseEvent(emitter, "action", result);
+                            } else if (result.isRequiresConfirmation()) {
+                                Map<String, Object> confirmData = new HashMap<>();
+                                confirmData.put("requiresConfirmation", true);
+                                confirmData.put("message", result.getConfirmationMessage());
+                                sendSseEvent(emitter, "confirm", confirmData);
+                            }
+                        }
+                    }
+                } catch (Exception e) {
+                    log.error("处理完整响应失败", e);
+                } finally {
+                    latch.countDown();
+                }
+            }
+        );
+        
+        // 等待流式完成
+        try {
+            latch.await();
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+        }
+    }
+
+    /**
      * 尝试解析结构化响应
      */
     private AiResponse tryParseStructuredResponse(String responseText, String requestId, 
@@ -114,7 +177,31 @@ public class ChatController {
                 return null;
             }
             
+            // 提取 JSON 部分（从最后一个 { 开始，确保是完整的 JSON）
             String jsonPart = responseText.substring(jsonStart);
+            
+            // 尝试找到 JSON 的结束位置
+            int braceCount = 0;
+            int jsonEnd = -1;
+            for (int i = 0; i < jsonPart.length(); i++) {
+                char c = jsonPart.charAt(i);
+                if (c == '{') {
+                    braceCount++;
+                } else if (c == '}') {
+                    braceCount--;
+                    if (braceCount == 0) {
+                        jsonEnd = i + 1;
+                        break;
+                    }
+                }
+            }
+            
+            if (jsonEnd == -1) {
+                log.debug("未找到完整的 JSON 结构");
+                return null;
+            }
+            
+            jsonPart = jsonPart.substring(0, jsonEnd);
             JsonNode jsonNode = objectMapper.readTree(jsonPart);
             
             // 检查是否有 type 字段
@@ -184,6 +271,33 @@ public class ChatController {
             
             // 解析图表数据
             AiResponse.ChartData chartData = objectMapper.treeToValue(dataNode, AiResponse.ChartData.class);
+            
+            // 如果 series 为空，根据 xAxis 和 yAxis 自动生成
+            if ((chartData.getSeries() == null || chartData.getSeries().isEmpty()) 
+                && chartData.getXAxis() != null && chartData.getYAxis() != null) {
+                
+                List<String> xData = chartData.getXAxis().getData();
+                List<String> yData = chartData.getYAxis().getData();
+                
+                if (xData != null && yData != null && !yData.isEmpty()) {
+                    // 转换 yAxis 数据为 Object 类型
+                    List<Object> seriesData = new java.util.ArrayList<>();
+                    for (String val : yData) {
+                        try {
+                            seriesData.add(Double.parseDouble(val));
+                        } catch (NumberFormatException e) {
+                            seriesData.add(val);
+                        }
+                    }
+                    
+                    AiResponse.ChartData.Series series = AiResponse.ChartData.Series.builder()
+                        .name(chartData.getTitle() != null ? chartData.getTitle() : "数据")
+                        .data(seriesData)
+                        .build();
+                    
+                    chartData.setSeries(java.util.Collections.singletonList(series));
+                }
+            }
             
             return AiResponse.Content.builder()
                 .text(text)

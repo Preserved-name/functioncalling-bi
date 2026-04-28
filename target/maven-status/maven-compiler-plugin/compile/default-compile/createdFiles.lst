@@ -15,12 +15,13 @@ com\example\function_calling\agent\WeatherAgent$WeatherAssistant.class
 com\example\function_calling\model\AiResponse$ActionData$SecurityConfig.class
 com\example\function_calling\service\AgentDispatcher.class
 com\example\function_calling\model\AiResponse$ChartData$AxisConfig$Builder.class
+com\example\function_calling\agent\StreamingBiAgent$BiAssistant.class
 com\example\function_calling\model\Intent.class
 com\example\function_calling\agent\Agent.class
 com\example\function_calling\model\AiResponse.class
 com\example\function_calling\controller\ChatController.class
-com\example\function_calling\agent\BiAgent.class
 com\example\function_calling\model\AiResponse$ActionData.class
+com\example\function_calling\agent\StreamingBiAgent.class
 com\example\function_calling\service\ConversationService.class
 com\example\function_calling\tools\MemoryTools.class
 com\example\function_calling\agent\GeneralAgent$ChatAssistant.class
@@ -38,6 +39,5 @@ com\example\function_calling\service\AgentDispatcher$AgentResponse.class
 com\example\function_calling\model\AiResponse$ChartData$Series$Builder.class
 com\example\function_calling\service\ActionExecutor$ActionResult.class
 com\example\function_calling\model\AiResponse$ActionData$SecurityConfig$Builder.class
-com\example\function_calling\agent\BiAgent$BiAssistant.class
 com\example\function_calling\service\ActionExecutor$SecurityCheckResult.class
 com\example\function_calling\service\ActionExecutor.class
