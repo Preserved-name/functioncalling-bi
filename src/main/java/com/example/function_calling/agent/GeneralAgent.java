@@ -3,19 +3,18 @@ package com.example.function_calling.agent;
 import com.example.function_calling.model.Intent;
 import com.example.function_calling.service.ConversationService;
 import com.example.function_calling.tools.MemoryTools;
-import dev.langchain4j.memory.chat.MessageWindowChatMemory;
-import dev.langchain4j.model.chat.ChatLanguageModel;
+import dev.langchain4j.model.chat.ChatModel;
 import dev.langchain4j.service.AiServices;
 import org.springframework.stereotype.Component;
 
 @Component
 public class GeneralAgent implements Agent {
 
-    private final ChatLanguageModel chatModel;
+    private final ChatModel chatModel;
     private final ConversationService conversationService;
     private final MemoryTools memoryTools;
 
-    public GeneralAgent(ChatLanguageModel chatModel, 
+    public GeneralAgent(ChatModel chatModel,
                        ConversationService conversationService,
                        MemoryTools memoryTools) {
         this.chatModel = chatModel;
@@ -39,18 +38,18 @@ public class GeneralAgent implements Agent {
     public String handleWithMemory(String sessionId, String userMessage) {
         return handleWithSession(sessionId, userMessage);
     }
-    
+
     /**
      * 带会话 ID 的处理方法（别名）
      */
     public String handleWithSession(String sessionId, String userMessage) {
         // 创建带记忆的助手
         ChatAssistant assistant = AiServices.builder(ChatAssistant.class)
-                .chatLanguageModel(chatModel)
+                .chatModel(chatModel)
                 .chatMemoryProvider(memoryId -> conversationService.getOrCreateMemory(sessionId))
                 .tools(memoryTools)
                 .build();
-        
+
         return assistant.chat(userMessage);
     }
 

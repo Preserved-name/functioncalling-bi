@@ -82,11 +82,13 @@ public class WeatherTools {
         
         for (Map<String, Object> day : forecast) {
             sb.append(String.format(
-                    "📅 日期：%s\n" +
-                    "🌤️ 天气：%s\n" +
-                    "🌡️ 温度：%d°C ~ %d°C\n" +
-                    "💧 湿度：%d%%\n" +
-                    "---\n",
+                    """
+                            📅 日期：%s
+                            🌤️ 天气：%s
+                            🌡️ 温度：%s°C ~ %s°C
+                            💧 湿度：%s%%
+                            ---
+                            """,
                     day.get("date"),
                     day.get("condition"),
                     day.get("tempHigh"),

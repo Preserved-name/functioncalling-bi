@@ -789,18 +789,13 @@ public class ConversationService {
 ### 7.1 application.properties
 
 ```properties
-# 阿里云百炼 API Key
-aliyun.bailian.api-key=${BAI_LIAN_API_KEY}
+# LangChain4j Community DashScope 配置
+langchain4j.community.dashscope.api-key=${BAI_LIAN_API_KEY}
 
 # 数据库配置
 spring.datasource.url=jdbc:mysql://localhost:3306/your_database
 spring.datasource.username=root
 spring.datasource.password=your_password
-
-# LangChain4j 模型配置
-langchain4j.open-ai.chat-model.base-url=https://dashscope.aliyuncs.com/compatible-mode/v1
-langchain4j.open-ai.chat-model.api-key=${BAI_LIAN_API_KEY}
-langchain4j.open-ai.chat-model.model-name=qwen-plus
 
 # 安全配置
 ai.security.allowed-url-prefixes=/dashboard,/reports

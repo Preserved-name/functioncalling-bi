@@ -265,7 +265,6 @@ body {
     border-radius: 18px;
     line-height: 1.6;
     word-wrap: break-word;
-    white-space: pre-wrap; /* 关键：保留换行符并自动换行 */
     box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
 }
 

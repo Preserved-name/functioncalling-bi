@@ -5,13 +5,8 @@ import com.example.function_calling.model.Intent;
 import com.example.function_calling.service.ConversationService;
 import com.example.function_calling.service.SchemaExtractor;
 import com.example.function_calling.tools.BiTools;
-import dev.langchain4j.data.message.SystemMessage;
-import dev.langchain4j.data.message.UserMessage;
-import dev.langchain4j.memory.chat.MessageWindowChatMemory;
-import dev.langchain4j.model.chat.ChatLanguageModel;
-import dev.langchain4j.model.chat.StreamingChatLanguageModel;
-import dev.langchain4j.model.output.Response;
-import dev.langchain4j.service.AiServices;
+import dev.langchain4j.model.chat.ChatModel;
+import dev.langchain4j.model.chat.StreamingChatModel;
 import dev.langchain4j.service.TokenStream;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -22,7 +17,6 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.function.Consumer;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
@@ -34,16 +28,16 @@ import java.util.regex.Pattern;
 public class StreamingBiAgent implements Agent {
 
     private static final Logger log = LoggerFactory.getLogger(StreamingBiAgent.class);
-    
-    private final StreamingChatLanguageModel streamingModel;
-    private final ChatLanguageModel chatModel; // 用于非流式调用（生成 SQL）
+
+    private final StreamingChatModel streamingModel;
+    private final ChatModel chatModel; // 用于非流式调用（生成 SQL）
     private final BiTools biTools;
     private final ConversationService conversationService;
     private final SchemaExtractor schemaExtractor;
     private final JdbcTemplate jdbcTemplate;
 
-    public StreamingBiAgent(StreamingChatLanguageModel streamingModel, 
-                           ChatLanguageModel chatModel,
+    public StreamingBiAgent(StreamingChatModel streamingModel,
+                           ChatModel chatModel,
                            BiTools biTools,
                            ConversationService conversationService,
                            SchemaExtractor schemaExtractor,
@@ -68,15 +62,15 @@ public class StreamingBiAgent implements Agent {
      * @param onChart 图表数据回调
      * @param onComplete 完成回调（包含完整响应）
      */
-    public void handleStreaming(String userMessage, Consumer<String> onToken, 
+    public void handleStreaming(String userMessage, Consumer<String> onToken,
                                Consumer<ChartRequest> onChart, Consumer<String> onComplete) {
         handleStreamingWithSession("default-session", userMessage, onToken, onChart, onComplete);
     }
-    
+
     /**
      * 优化 2 & 4：重构 BI Agent - 单次 LLM + 程序执行 + 真正流式输出
      */
-    public void handleStreamingWithSession(String sessionId, String userMessage, 
+    public void handleStreamingWithSession(String sessionId, String userMessage,
                                           Consumer<String> onToken,
                                           Consumer<ChartRequest> onChart,
                                           Consumer<String> onComplete) {
@@ -87,27 +81,27 @@ public class StreamingBiAgent implements Agent {
             try {
                 // 1. 程序预处理：获取 schema（从缓存）
                 String schema = schemaExtractor.extractAllSchemas();
-                
+
                 // 2. 一次 LLM 调用：生成 SQL 并判断是否需要图表
                 String sqlPrompt = buildSqlPrompt(userMessage, schema);
-                String llmResponse = chatModel.generate(sqlPrompt);
-                
+                String llmResponse = chatModel.chat(sqlPrompt);
+
                 // 解析 LLM 返回的 SQL 和图表意图
                 ParsedResult parsed = parseLlmResponse(llmResponse);
-                
+
                 // 优化：在 SQL 执行阶段发送提示
                 onToken.accept("正在查询数据库...\n\n");
-                
+
                 // 3. 程序执行：执行 SQL
                 List<Map<String, Object>> data = executeQuery(parsed.sql);
-                
+
                 // 4. 第二次 LLM 调用：分析数据并生成总结与图表指令
                 String analysisPrompt = buildAnalysisPrompt(userMessage, parsed.sql, data);
-                String analysisResponse = chatModel.generate(analysisPrompt);
-                
+                String analysisResponse = chatModel.chat(analysisPrompt);
+
                 // 解析分析结果（提取图表意图和文本总结）
                 ParsedResult finalResult = parseLlmResponse(analysisResponse);
-                
+
                 // 5. 程序执行：构建图表数据（如果需要）
                 if (finalResult.needsChart) {
                     onToken.accept("正在生成图表...\n\n");
@@ -116,16 +110,16 @@ public class StreamingBiAgent implements Agent {
                         onChart.accept(chartRequest);
                     }
                 }
-                
+
                 // 6. 流式输出 LLM 生成的专业总结
                 String summary = finalResult.sql; // 这里的 sql 字段现在存储的是 LLM 生成的文本总结
                 for (char c : summary.toCharArray()) {
                     onToken.accept(String.valueOf(c));
                     try { Thread.sleep(5); } catch (InterruptedException e) { break; }
                 }
-                
+
                 onComplete.accept(summary);
-                
+
             } catch (Exception e) {
                 log.error("BI Agent 处理异常", e);
                 onToken.accept("处理出错: " + e.getMessage());
@@ -137,7 +131,7 @@ public class StreamingBiAgent implements Agent {
     private String buildAnalysisPrompt(String userQuestion, String sql, List<Map<String, Object>> data) {
         // 限制传给 LLM 的数据量，防止 Token 爆炸
         List<Map<String, Object>> sampleData = data.size() > 20 ? data.subList(0, 20) : data;
-        
+
         return String.format(
             "你是一个资深数据分析师。用户的问题是：'%s'。\n" +
             "我们已经执行了 SQL 查询并得到了以下 %d 条数据（部分展示）：\n%s\n\n" +
@@ -183,10 +177,10 @@ public class StreamingBiAgent implements Agent {
         } else if (response.contains("NO_CHART")) {
             sql = response.replace("NO_CHART", "");
         }
-        
+
         // 2. 健壮地提取纯净 SQL（去除 Markdown 标记和无关前缀）
         sql = extractCleanSql(sql);
-        
+
         return new ParsedResult(sql, needsChart, chartType, title);
     }
 
@@ -195,9 +189,9 @@ public class StreamingBiAgent implements Agent {
      */
     private String extractCleanSql(String rawSql) {
         if (rawSql == null) return "";
-        
+
         String sql = rawSql.trim();
-        
+
         // 1. 移除 Markdown 代码块标记 (```sql ... ```)
         if (sql.contains("```")) {
             // 提取第一个 ``` 和最后一个 ``` 之间的内容
@@ -207,11 +201,11 @@ public class StreamingBiAgent implements Agent {
                 sql = sql.substring(start + 3, end).trim();
             }
         }
-        
+
         // 2. 移除常见的语言标识符或前缀（如 sql, mysql, SELECT语句：等）
         // 使用正则匹配开头的非 SQL 关键字部分
         sql = sql.replaceAll("^(?i)(sql|mysql|select\\s*statement|select\\s*语句)[:：\\s]*", "").trim();
-        
+
         // 3. 寻找第一个真正的 SELECT 关键字位置（确保后面跟着空格或换行，避免匹配到单词内部）
         Pattern pattern = Pattern.compile("(?i)\\bSELECT\\b");
         Matcher matcher = pattern.matcher(sql);
@@ -221,7 +215,7 @@ public class StreamingBiAgent implements Agent {
             // 如果找不到 SELECT，尝试查找其他可能的开头，或者直接返回清理后的字符串
             log.warn("未在响应中找到 SELECT 关键字，原始内容: {}", rawSql);
         }
-        
+
         // 4. 移除末尾的分号、空白和可能的 LIMIT 重复添加
         sql = sql.trim();
         while (sql.endsWith(";")) {
@@ -236,7 +230,7 @@ public class StreamingBiAgent implements Agent {
             if (sql == null || sql.trim().isEmpty()) {
                 throw new IllegalArgumentException("SQL 语句为空");
             }
-            
+
             String cleanSql = sql.trim();
             // 再次确保移除末尾分号，防止 LLM 绕过解析逻辑
             while (cleanSql.endsWith(";")) {
@@ -257,16 +251,16 @@ public class StreamingBiAgent implements Agent {
 
     private ChartRequest buildChartRequest(List<Map<String, Object>> data, String type, String title) {
         if (data == null || data.isEmpty()) return null;
-        
+
         Map<String, Object> firstRow = data.get(0);
         List<String> keys = new ArrayList<>(firstRow.keySet());
-        
+
         if (keys.isEmpty()) return null;
-        
+
         // 1. 智能识别 X 轴和 Y 轴字段
         String tempXKey = null;
         List<String> yKeys = new ArrayList<>();
-        
+
         for (String key : keys) {
             if(key.contains("_id")) continue;
             Object val = firstRow.get(key);
@@ -282,43 +276,43 @@ public class StreamingBiAgent implements Agent {
                 }
             }
         }
-        
+
         // 如果没找到非数字字段做 X 轴，就用第一个字段
         if (tempXKey == null && !keys.isEmpty()) {
             tempXKey = keys.get(0);
         }
-        
+
         // 关键修复：创建一个 final 副本供 Lambda 使用
         final String xKey = tempXKey;
-        
+
         ChartRequest request = new ChartRequest();
         request.setChartType(type);
         request.setTitle(title);
-        
+
         // 2. 构建 X 轴
         ChartRequest.AxisConfig xAxis = new ChartRequest.AxisConfig();
         xAxis.setLabel(xKey);
         xAxis.setData(data.stream().map(r -> String.valueOf(r.get(xKey))).collect(java.util.stream.Collectors.toList()));
         request.setXAxis(xAxis);
-        
+
         // 2.1 构建 Y 轴（取第一个数值字段的名称作为 Y 轴标签）
         if (!yKeys.isEmpty()) {
             ChartRequest.AxisConfig yAxis = new ChartRequest.AxisConfig();
             yAxis.setLabel(yKeys.get(0)); // 使用第一个数值列的名称作为 Y 轴标题
             request.setYAxis(yAxis);
         }
-        
+
         // 3. 构建 Series (只包含数值字段)
         List<ChartRequest.Series> seriesList = new java.util.ArrayList<>();
         for (String yKey : yKeys) {
             List<Object> yData = data.stream().map(r -> r.get(yKey)).collect(java.util.stream.Collectors.toList());
-            
+
             ChartRequest.Series series = new ChartRequest.Series();
             series.setName(yKey);
             series.setData(yData);
             seriesList.add(series);
         }
-        
+
         // 4. 兜底：如果没有数值字段，就把剩下的字段都塞进 Series
         if (seriesList.isEmpty()) {
              for (String key : keys) {
@@ -331,9 +325,9 @@ public class StreamingBiAgent implements Agent {
                  }
              }
         }
-        
+
         request.setSeries(seriesList);
-        
+
         return request;
     }
 
@@ -349,21 +343,21 @@ public class StreamingBiAgent implements Agent {
             this.title = title;
         }
     }
-    
+
     @Override
     public String handle(String userMessage) {
         // 同步方法：等待流式完成（用于兼容旧接口）
         return handleWithSession("default-session", userMessage);
     }
-    
+
     /**
      * 带会话 ID 的同步处理方法
      */
     public String handleWithSession(String sessionId, String userMessage) {
         StringBuilder response = new StringBuilder();
         java.util.concurrent.CountDownLatch latch = new java.util.concurrent.CountDownLatch(1);
-        
-        handleStreamingWithSession(sessionId, userMessage, 
+
+        handleStreamingWithSession(sessionId, userMessage,
             token -> {}, // 不处理单个 token
             chartRequest -> {}, // 不处理图表（同步方法不需要）
             complete -> {
@@ -371,13 +365,13 @@ public class StreamingBiAgent implements Agent {
                 latch.countDown();
             }
         );
-        
+
         try {
             latch.await(); // 等待完成
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
         }
-        
+
         return response.toString();
     }
 
