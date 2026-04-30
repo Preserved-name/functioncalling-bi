@@ -6,6 +6,7 @@ public enum Intent {
     KNOWLEDGE("知识问答"),
     CODE("代码助手"),
     BI_ANALYSIS("数据分析"),
+    RAG("知识库检索"),
     GENERAL("通用对话");
 
     private final String description;

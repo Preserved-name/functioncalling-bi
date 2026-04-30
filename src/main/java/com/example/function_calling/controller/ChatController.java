@@ -5,6 +5,7 @@ import com.example.function_calling.model.AiResponse;
 import com.example.function_calling.model.Intent;
 import com.example.function_calling.service.ActionExecutor;
 import com.example.function_calling.service.AgentDispatcher;
+import com.example.function_calling.service.RagService;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.slf4j.Logger;
@@ -29,13 +30,15 @@ public class ChatController {
     private final AgentDispatcher agentDispatcher;
     private final ActionExecutor actionExecutor;
     private final StreamingBiAgent streamingBiAgent;
+    private final RagService ragService;
     private final ObjectMapper objectMapper = new ObjectMapper();
 
-    public ChatController(AgentDispatcher agentDispatcher, ActionExecutor actionExecutor, 
-                         StreamingBiAgent streamingBiAgent) {
+    public ChatController(AgentDispatcher agentDispatcher, ActionExecutor actionExecutor,
+                         StreamingBiAgent streamingBiAgent, RagService ragService) {
         this.agentDispatcher = agentDispatcher;
         this.actionExecutor = actionExecutor;
         this.streamingBiAgent = streamingBiAgent;
+        this.ragService = ragService;
     }
 
     /**
@@ -94,6 +97,8 @@ public class ChatController {
                         responseText = ((KnowledgeAgent) agent).handleWithSession(sessionId, request.getMessage());
                     } else if (agent instanceof CodeAgent) {
                         responseText = ((CodeAgent) agent).handleWithSession(sessionId, request.getMessage());
+                    } else if (agent instanceof RagAgent) {
+                        responseText = ((RagAgent) agent).handleWithSession(sessionId, request.getMessage());
                     } else if (agent instanceof GeneralAgent) {
                         responseText = ((GeneralAgent) agent).handleWithSession(sessionId, request.getMessage());
                     } else {
@@ -454,6 +459,18 @@ public class ChatController {
             .build();
     }
 
+    /**
+     * RAG 文档入库接口
+     */
+    @PostMapping("/rag/ingest")
+    public Map<String, Object> ingestDocument(@RequestBody IngestRequest request) {
+        int count = ragService.ingest(request.getContent(), request.getSource());
+        Map<String, Object> result = new HashMap<>();
+        result.put("status", "success");
+        result.put("segmentsStored", count);
+        return result;
+    }
+
     @GetMapping("/health")
     public Map<String, String> health() {
         Map<String, String> result = new HashMap<>();
@@ -479,6 +496,27 @@ public class ChatController {
 
         public void setSessionId(String sessionId) {
             this.sessionId = sessionId;
+        }
+    }
+
+    public static class IngestRequest {
+        private String content;
+        private String source;
+
+        public String getContent() {
+            return content;
+        }
+
+        public void setContent(String content) {
+            this.content = content;
+        }
+
+        public String getSource() {
+            return source;
+        }
+
+        public void setSource(String source) {
+            this.source = source;
         }
     }
 }

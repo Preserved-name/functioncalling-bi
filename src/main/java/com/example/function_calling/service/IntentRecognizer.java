@@ -41,8 +41,15 @@ public class IntentRecognizer {
             return Intent.CODE;
         }
 
+        // RAG: 知识库检索（优先于通用知识问答）
+        if (msg.contains("知识库") || msg.contains("文档中") || msg.contains("根据文档") ||
+            msg.contains("根据资料") || msg.contains("检索") || msg.contains("资料库") ||
+            msg.contains("公司文档") || msg.contains("内部文档")) {
+            return Intent.RAG;
+        }
+
         // KNOWLEDGE: 知识问答（什么是、为什么、如何等）
-        if (msg.contains("是什么") || msg.contains("为什么") || msg.contains("怎么做") || 
+        if (msg.contains("是什么") || msg.contains("为什么") || msg.contains("怎么做") ||
             msg.contains("介绍一下") || msg.contains("定义")) {
             return Intent.KNOWLEDGE;
         }

@@ -61,11 +61,17 @@
             <artifactId>langchain4j</artifactId>
         </dependency>
 
-        <!-- LangChain4j Community DashScope Spring Boot Starter（自动配置 ChatLanguageModel 和 StreamingChatLanguageModel） -->
+        <!-- LangChain4j Community DashScope Spring Boot Starter（自动配置 ChatModel 和 StreamingChatModel） -->
         <dependency>
             <groupId>dev.langchain4j</groupId>
             <artifactId>langchain4j-community-dashscope-spring-boot-starter</artifactId>
             <version>${langchain4j-community.version}</version>
+        </dependency>
+
+        <!-- LangChain4j Qdrant 向量数据库 -->
+        <dependency>
+            <groupId>dev.langchain4j</groupId>
+            <artifactId>langchain4j-qdrant</artifactId>
         </dependency>
 
         <dependency>

@@ -53,6 +53,8 @@ public class AgentDispatcher {
             response = ((com.example.function_calling.agent.CodeAgent) agent).handleWithSession(sessionId, userMessage);
         } else if (agent instanceof com.example.function_calling.agent.StreamingBiAgent) {
             response = ((com.example.function_calling.agent.StreamingBiAgent) agent).handleWithSession(sessionId, userMessage);
+        } else if (agent instanceof com.example.function_calling.agent.RagAgent) {
+            response = ((com.example.function_calling.agent.RagAgent) agent).handleWithSession(sessionId, userMessage);
         } else if (agent instanceof com.example.function_calling.agent.GeneralAgent) {
             response = ((com.example.function_calling.agent.GeneralAgent) agent).handleWithSession(sessionId, userMessage);
         } else {
